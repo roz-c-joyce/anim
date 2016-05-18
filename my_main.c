@@ -82,6 +82,34 @@
   jdyrlandweaver
   ====================*/
 void first_pass() {
+
+  int basename_set = 0;
+  int i;
+
+  if(op[0].opcode != FRAMES){
+    num_frames = op[0].op.frames.num_frames;
+  }
+  else{
+    num_frames = op[0].op.frames.num_frames;
+  }
+
+  for(i = 1; i < lastop; i++){
+    switch(op[i].opcode){
+    case FRAMES:
+      fprintf(stderr, "frames first\n");
+      exit(1);
+      break;
+      
+    case BASENAME:
+      strcpy(name, op[i].op.basename.p->name);
+      basename_set = 1;
+      break;
+    }
+  }
+  if(num_frames > 1 && !basename_set){
+    strcpy(name, "anim");
+    printf("using 'animation'\n");
+  }
 }
 
 /*======== struct vary_node ** second_pass()) ==========
@@ -107,6 +135,49 @@ void first_pass() {
   jdyrlandweaver
   ====================*/
 struct vary_node ** second_pass() {
+  struct vary_node **knobs = (struct vary_node **) calloc(num_frames, sizeof(struct vary_node *));
+  struct vary_node *current;
+  struct vary_node *previous;
+  int i, j, frames;
+  double inc;
+
+  for(i = 0; i < lastop; i++){
+    if(op[i].opcode == VARY){
+      if(op[i].op.vary.start_frame < 0 || op[i].op.vary.start_frame > num_frames){
+	fprintf(stderr, "not a valid start frame\n");
+	exit(1);
+      }
+      if(op[i].op.vary.end_frame < 0 || op[i].op.vary.end_frame > num_frames){
+	fprintf(stderr, "not valid end frame\n");
+	exit(1);
+      }
+      if(op[i].op.vary.start_frame < op[i].op.vary.end_frame){
+	fprintf(stderr, "not valid frames\n");
+      }
+      frames = op[i].op.vary.end_frame - op[i].op.vary.start_frame;
+      inc = (double)(op[i].op.vary.end_val - op[i].op.vary.start_val)/(double)(frames);
+      for(j = 0; j < frames; j++){
+	current = (struct vary_node *)malloc(sizeof(struct vary_node));
+	strcpy(current->name, op[i].op.vary.p->name);
+	current->value = op[i].op.vary.start_val + (j * inc);
+	current->next = NULL;
+	int k = op[i].op.vary.start_frame + j;
+	if(knobs[k]){
+	  previous = knobs[k];
+	  while(previous->next){
+	    previous = previous->next;
+	  }
+	  previous->next = current;
+	}
+	else{
+	  knobs[k] = current;
+	}
+      }
+    }
+  }
+  return knobs;
+
+
 }
 
 
@@ -168,7 +239,7 @@ void print_knobs() {
   ====================*/
 void my_main( int polygons ) {
 
-  int i, f, j;
+  int i, f, j, frame;
   double step;
   double xval, yval, zval, knob_value;
   struct matrix *transform;
@@ -177,7 +248,14 @@ void my_main( int polygons ) {
   screen t;
   color g;
 
+  s = new_stack();
+  tmp = new_matrix(4, 1000);
+  clear_screen(t);
+
+  first_pass();
+
   struct vary_node **knobs;
+  knobs = second_pass();
   struct vary_node *vn;
   char frame_name[128];
 
